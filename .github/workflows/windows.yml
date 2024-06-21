@@ -413,52 +413,97 @@ jobs:
           cmake --build bld --config '${{ matrix.type }}' --target test-ci
 
   msvc:
-    name: 'msvc (${{ matrix.arch }}, ${{ matrix.plat }}, ${{ matrix.config }})'
+    name: 'msvc vcpkg (${{ matrix.name }})'
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       matrix:
         include:
-          - { arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_USE_SCHANNEL=ON  -DBUILD_SHARED_LIBS=OFF -DENABLE_UNICODE=ON ', type: 'Debug' }
-          - { arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_USE_SCHANNEL=OFF -DBUILD_SHARED_LIBS=OFF -DENABLE_UNICODE=OFF', type: 'Debug' }
-          - { arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_USE_SCHANNEL=OFF -DHTTP_ONLY=ON          -DENABLE_UNICODE=OFF', type: 'Debug' }
+          - { name: "schannel", arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_ZSTD=ON -DUSE_NGHTTP2=ON -DCURL_USE_SCHANNEL=ON  -DBUILD_SHARED_LIBS=OFF -DENABLE_UNICODE=ON  -DCURL_USE_LIBSSH2=ON  -DCURL_USE_OPENSSL=OFF', type: 'Debug',   install: "nghttp2 zstd libssh2[core,openssl] "}
+          - { name: "openssl",  arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_ZSTD=ON -DUSE_NGHTTP2=ON -DCURL_USE_SCHANNEL=OFF -DBUILD_SHARED_LIBS=OFF -DENABLE_UNICODE=ON  -DCURL_USE_LIBSSH2=ON  -DCURL_USE_OPENSSL=ON ', type: 'Debug',   install: "nghttp2 zstd libssh2[core,openssl] openssl"}
+          - { name: "no ssl",   arch: 'x64', plat: 'windows', tflags: '~1516 ~2301 ~2302 ~2303 ~2307', config: '-DENABLE_DEBUG=ON -DCURL_ZSTD=ON -DUSE_NGHTTP2=ON -DCURL_USE_SCHANNEL=OFF -DHTTP_ONLY=ON          -DENABLE_UNICODE=OFF -DCURL_USE_LIBSSH2=OFF -DCURL_USE_OPENSSL=OFF', type: 'Debug',   install: "nghttp2 zstd"}
       fail-fast: false
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
+      - uses: actions/checkout@v4
+
+      - name: Cache dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: "cache/${{ matrix.name }}"
+          key: ${{ matrix.plat }}-${{ matrix.name }}-${{ hashFiles('.github/workflows/windows.yml') }}
+          restore-keys: ${{ matrix.plat }}-${{ matrix.name }}-${{ hashFiles('.github/workflows/windows.yml') }}
+
+      - name: Init vcpkg
+        if: success()
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg/
+          vcpkg/bootstrap-vcpkg.sh
+
+      - name: 'vcpkg build'
+        shell: bash
+        run: |
+          export VCPKG_ROOT=$PWD/vcpkg
+          export CURRENT_BINARY_CACHE="cache/${{ matrix.name }}"
+          mkdir -p "$CURRENT_BINARY_CACHE"
+          export VCPKG_BINARY_SOURCES="clear;files,$GITHUB_WORKSPACE/$CURRENT_BINARY_CACHE,readwrite;"          
+          vcpkg/vcpkg x-set-installed ${{ matrix.install }} --triplet=${{ matrix.arch }}-${{ matrix.plat }}
+
+      - name: Save cache dependencies
+        id: cache-save
+        uses: actions/cache/save@v4
+        with:
+          path: "cache/${{ matrix.name }}"
+          key: ${{ matrix.plat }}-${{ matrix.name }}-${{ hashFiles('.github/workflows/windows.yml') }}-${{ hashFiles('vcpkg/installed/vcpkg/info/*') }}
+
       - name: 'cmake configure'
         timeout-minutes: 5
         shell: bash
         run: |
-          archgen=${{ matrix.arch }}; [ "${archgen}" = 'x86' ] && archgen='Win32'
-          if [ '${{ matrix.plat }}' = 'uwp' ]; then
-            system='WindowsStore'
-            options='-DCMAKE_SYSTEM_VERSION=10.0'
-          else
-            system='Windows'
-          fi
-          [ '${{ matrix.type }}' = 'Debug' ] && options+=' -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG='
-          [ '${{ matrix.type }}' = 'Release' ] && options+=' -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE='
-          cmake -B bld ${options} \
-            "-DCMAKE_SYSTEM_NAME=${system}" \
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
-            "-DCMAKE_GENERATOR_PLATFORM=${archgen}" \
-            '-DVCPKG_TARGET_TRIPLET=${{ matrix.arch }}-${{ matrix.plat }}' \
-            -DCMAKE_VS_GLOBALS=TrackFileAccess=false \
-            '-DCMAKE_UNITY_BUILD=${{ matrix.unity }}' \
-            "-DCMAKE_C_FLAGS=${cflags}" \
-            '-DCMAKE_BUILD_TYPE=${{ matrix.type }}' \
+          export VCPKG_ROOT=$PWD/vcpkg
+          cmake . -B bld \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_INSTALLED_DIR=$VCPKG_ROOT/installed \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.arch }}-${{ matrix.plat }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.type }} \
             -DCMAKE_UNITY_BUILD=ON \
             -DCURL_WERROR=ON \
             -DBUILD_EXAMPLES=ON \
             -DENABLE_WEBSOCKETS=ON \
-            ${{ matrix.config }} || { cat bld/CMakeFiles/CMake*.yaml; false; }
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG= \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE= \
+            ${{ matrix.config }}
+
+      - name: Prepare logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          export VCPKG_ROOT=$PWD/vcpkg
+          7z a -t7z -r -mx=9 logs.7z \
+              $VCPKG_ROOT/buildtrees/*.log \
+              bld/.ninja_log \
+              bld/build.ninja \
+              bld/install_manifest.txt \
+              bld/vcpkg-manifest-install.log \
+              bld/CMakeFiles/CMake*.yaml
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows_logs_${{matrix.BUILD_OPTION}}_${{github.event.pull_request.head.sha}}
+          path: logs.7z
 
       - name: 'cmake build'
         timeout-minutes: 5
         shell: bash
         run: |
-          cmake --build bld --config '${{ matrix.type }}' --parallel 5
-          [[ '${{ matrix.config }}' != *'BUILD_SHARED_LIBS=OFF'* ]] && cp -f -p bld/lib/*.dll bld/src/
+          export VCPKG_ROOT="$PWD/vcpkg"
+          cmake --build bld --config ${{ matrix.type }} --parallel 5
+          export VCPKG_TRIPLED_DIR="$VCPKG_ROOT/installed/${{ matrix.arch }}-${{ matrix.plat }}"
+          export debug_lib="$VCPKG_TRIPLED_DIR/debug/bin"
+          export release_lib="$VCPKG_TRIPLED_DIR/bin"
+          export PATH="$PWD/bld/lib/:$release_lib:$debug_lib:$PATH"
           bld/src/curl.exe --disable --version
 
       - name: 'cmake build tests'
@@ -466,13 +511,17 @@ jobs:
         timeout-minutes: 10
         shell: bash
         run: |
-          cmake --build bld --config '${{ matrix.type }}' --parallel 5 --target testdeps
+          cmake --build bld --config ${{ matrix.type }} --parallel 5 --target testdeps
 
       - name: 'cmake run tests'
         if: ${{ matrix.tflags != 'skipall' && matrix.tflags != 'skiprun' }}
         timeout-minutes: 30
         shell: bash
         run: |
-          export TFLAGS='-j14 !TFTP !MQTT !WebSockets ${{ matrix.tflags }}'
-          ls bld/lib/*.dll >/dev/null 2>&1 && cp -f -p bld/lib/*.dll bld/tests/libtest/
-          cmake --build bld --config '${{ matrix.type }}' --target test-ci
+          export TFLAGS="-j14 ${{ matrix.tflags }}"
+          export VCPKG_ROOT=$PWD/vcpkg
+          export VCPKG_TRIPLED_DIR="$VCPKG_ROOT/installed/${{ matrix.arch }}-${{ matrix.plat }}"
+          export debug_lib="$VCPKG_TRIPLED_DIR/debug/bin"
+          export release_lib="$VCPKG_TRIPLED_DIR/bin"
+          export PATH="$PWD/bld/lib/:$release_lib:$debug_lib:$PATH"
+          cmake --build bld --config ${{ matrix.type }} --target test-ci
