@@ -557,9 +557,11 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: 'vcpkg versions'
-        timeout-minutes: 1
+        timeout-minutes: 10
         run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" pull
           git -C "$VCPKG_INSTALLATION_ROOT" show --no-patch --format='%H %ai'
+          $VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat
           vcpkg version
 
       - name: 'vcpkg build'
