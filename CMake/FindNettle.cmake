@@ -28,10 +28,10 @@
 # NETTLE_INCLUDE_DIRS - nettle include directories
 # NETTLE_LIBRARIES - nettle library names
 
-if(UNIX)
+
   find_package(PkgConfig QUIET)
   pkg_check_modules(NETTLE "nettle")
-endif()
+
 
 if(NETTLE_FOUND)
   set(NETTLE_LIBRARIES ${NETTLE_LINK_LIBRARIES})
