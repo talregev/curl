@@ -28,7 +28,11 @@
 
 #ifdef USE_MSH3
 
+#ifdef USE_MSQUIC
+#include <msquic.h>
+#else
 #include <msh3.h>
+#endif
 
 void Curl_msh3_ver(char *p, size_t len);
 

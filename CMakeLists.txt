@@ -788,6 +788,18 @@ if(USE_OPENSSL_QUIC)
   list(APPEND LIBCURL_PC_REQUIRES_PRIVATE "libnghttp3")
 endif()
 
+option(CURL_USE_MSQUIC "Use msquic library for HTTP/3 support" OFF)
+if(CURL_USE_MSQUIC)
+  if(USE_NGTCP2 OR USE_QUICHE OR USE_MSH3 OR USE_OPENSSL_QUIC)
+    message(FATAL_ERROR "Only one HTTP/3 backend can be selected!")
+  endif()
+  find_package(msquic CONFIG REQUIRED)
+  include_directories(${MSQUIC_INCLUDE_DIRS})
+  list(APPEND CURL_LIBS ${MSQUIC_LIBRARIES})
+  set(USE_MSH3 ON)
+  set(USE_MSQUIC ON)
+endif()
+
 if(USE_MBEDTLS OR
    USE_BEARSSL OR
    USE_SECTRANSP)

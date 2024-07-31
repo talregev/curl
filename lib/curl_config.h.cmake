@@ -747,6 +747,9 @@ ${SIZEOF_TIME_T_CODE}
 /* to enable msh3 */
 #cmakedefine USE_MSH3 1
 
+/* to enable msquic */
+#cmakedefine USE_MSQUIC 1
+
 /* if Unix domain sockets are enabled  */
 #cmakedefine USE_UNIX_SOCKETS 1
 
