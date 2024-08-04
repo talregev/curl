@@ -184,7 +184,7 @@ enum {
 }
 
 struct cs_entry {
-  uint16_t id;
+  uint32_t id;
   uint8_t zip[6];
 };
 
