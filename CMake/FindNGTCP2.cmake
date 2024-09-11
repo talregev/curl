@@ -85,6 +85,7 @@ if(NGTCP2_FIND_COMPONENTS)
   if(_ngtcp2_crypto_backend)
     string(TOLOWER "ngtcp2_crypto_${_ngtcp2_crypto_backend}" _crypto_library)
     if(CURL_USE_PKGCONFIG)
+      find_package(PkgConfig REQUIRED)
       pkg_check_modules(PC_${_crypto_library} "lib${_crypto_library}")
     endif()
     find_library(${_crypto_library}_LIBRARY NAMES ${_crypto_library}
