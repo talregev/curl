@@ -722,8 +722,12 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: 'vcpkg versions'
-        timeout-minutes: 1
+        timeout-minutes: 5
         run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" remote add talregev https://github.com/talregev/vcpkg
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch --all
+          git -C "$VCPKG_INSTALLATION_ROOT" switch TalR/ngtcp2_libressl_fix
+          "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat"
           git -C "$VCPKG_INSTALLATION_ROOT" show --no-patch --format='%H %ai'
           vcpkg version
 
