@@ -724,9 +724,9 @@ jobs:
       - name: 'vcpkg versions'
         timeout-minutes: 5
         run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" remote add talregev https://github.com/talregev/vcpkg
+          git -C "$VCPKG_INSTALLATION_ROOT" remote add dg0yt https://github.com/dg0yt/vcpkg
           git -C "$VCPKG_INSTALLATION_ROOT" fetch --all
-          git -C "$VCPKG_INSTALLATION_ROOT" switch TalR/ngtcp2_libressl_fix
+          git -C "$VCPKG_INSTALLATION_ROOT" switch libressl
           "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat"
           git -C "$VCPKG_INSTALLATION_ROOT" show --no-patch --format='%H %ai'
           vcpkg version
@@ -743,11 +743,6 @@ jobs:
       - name: 'cmake configure'
         timeout-minutes: 5
         run: |
-          if [[ '${{ matrix.install }}' = *'libressl'* ]]; then
-            # without this, CMake gets confused by the non-vcpkg OpenSSL
-            # installed on the runner and fails when linking.
-            options+=" -DOPENSSL_ROOT_DIR=$VCPKG_INSTALLATION_ROOT/installed/${{ matrix.arch }}-${{ matrix.plat }}"
-          fi
           cmake -B bld ${options} \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
             "-DVCPKG_INSTALLED_DIR=$VCPKG_INSTALLATION_ROOT/installed" \
