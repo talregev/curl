@@ -736,9 +736,9 @@ jobs:
         timeout-minutes: 35
         run: |
           # Temporary workaround pending: https://github.com/microsoft/vcpkg-tool/pull/1501
-          export SystemDrive="$SYSTEMDRIVE"
-          export SystemRoot="$SYSTEMROOT"
-          export windir="$WINDIR"
+          # export SystemDrive="$SYSTEMDRIVE"
+          # export SystemRoot="$SYSTEMROOT"
+          # export windir="$WINDIR"
           vcpkg x-set-installed ${{ matrix.install }} '--triplet=${{ matrix.arch }}-${{ matrix.plat }}'
 
       - name: Prepare logs on failure
