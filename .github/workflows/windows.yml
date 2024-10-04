@@ -663,13 +663,13 @@ jobs:
               -DCURL_CA_SEARCH_SAFE=ON
 
           - name: 'boringssl-ECH'
-            install: 'brotli zlib zstd libpsl nghttp2 boringssl libssh2[core,zlib]'
+            install: 'brotli zlib zstd libpsl nghttp2 boringssl libssh2[core,zlib] pkgconf ngtcp2[boringssl] nghttp3'
             arch: 'x64'
             plat: 'windows'
             type: 'Debug'
             tflags: '~1516 ~2301 ~2302 ~2303 ~2307'
             config: >-
-              -DCURL_BROTLI=ON -DCURL_ZSTD=ON -DCURL_USE_LIBSSH2=ON
+              -DCURL_BROTLI=ON -DCURL_ZSTD=ON -DCURL_USE_LIBSSH2=ON -DUSE_NGTCP2=ON
               -DCURL_USE_SCHANNEL=OFF -DCURL_USE_OPENSSL=ON
               -DUSE_HTTPSRR=ON -DUSE_ECH=ON
 
@@ -724,6 +724,9 @@ jobs:
       - name: 'vcpkg versions'
         timeout-minutes: 10
         run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" remote add talregev https://github.com/talregev/vcpkg
+          git -C "$VCPKG_INSTALLATION_ROOT" fetch --all
+          git -C "$VCPKG_INSTALLATION_ROOT" switch TalR/ngtcp2_boringssl
           git -C "$VCPKG_INSTALLATION_ROOT" pull
           "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat"
           git -C "$VCPKG_INSTALLATION_ROOT" show --no-patch --format='%H %ai'
