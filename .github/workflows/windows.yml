@@ -611,7 +611,7 @@ jobs:
   msvc:
     name: 'msvc, CM ${{ matrix.arch }}-${{ matrix.plat }} ${{ matrix.name }}'
     runs-on: windows-latest
-    timeout-minutes: 55
+    timeout-minutes: 120
     defaults:
       run:
         shell: C:\msys64\usr\bin\bash.exe {0}
@@ -692,7 +692,7 @@ jobs:
             arch: 'x64'
             plat: 'windows'
             type: 'Debug'
-            tflags: '~1516 !1909 !1916'
+            tflags: '~1516'
             # WARNING: libssh uses hard-coded world-writable paths (/etc/..., ~/.ssh/) to
             #          read its configuration from, making it vulnerable to attacks on
             #          Windows. Do not use this component till there is a fix for these.
@@ -816,9 +816,9 @@ jobs:
 
       - name: 'cmake run tests'
         if: ${{ matrix.tflags != 'skipall' && matrix.tflags != 'skiprun' }}
-        timeout-minutes: 20
+        timeout-minutes: 60
         run: |
-          export TFLAGS='-j8 ~WebSockets ~SCP ~612 ${{ matrix.tflags }}'
+          export TFLAGS='~WebSockets ~SCP ~612 ${{ matrix.tflags }}'
           if [[ '${{ matrix.install }}' = *'libssh2[core,zlib]'* ]]; then
             TFLAGS+=' ~SFTP'
           elif [[ '${{ matrix.install }}' = *'libssh '* ]]; then
