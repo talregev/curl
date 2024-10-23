@@ -727,9 +727,9 @@ jobs:
       - name: 'vcpkg versions'
         timeout-minutes: 5
         run: |
-          git -C "$VCPKG_INSTALLATION_ROOT" remote add dg0yt https://github.com/dg0yt/vcpkg
-          git -C "$VCPKG_INSTALLATION_ROOT" fetch --all
-          git -C "$VCPKG_INSTALLATION_ROOT" switch libressl
+          # git -C "$VCPKG_INSTALLATION_ROOT" remote add dg0yt https://github.com/dg0yt/vcpkg
+          # git -C "$VCPKG_INSTALLATION_ROOT" fetch --all
+          # git -C "$VCPKG_INSTALLATION_ROOT" switch libressl
           git -C "$VCPKG_INSTALLATION_ROOT" pull
           "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat"
           git -C "$VCPKG_INSTALLATION_ROOT" show --no-patch --format='%H %ai'
