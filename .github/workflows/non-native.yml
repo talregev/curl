@@ -83,8 +83,9 @@ jobs:
           export CC="/opt/appveyor/build-agent/opt/amiga/bin/m68k-amigaos-gcc"
           export CFLAGS="-O0 -msoft-float -mcrt=clib2"
 
-          vcpkg install zlib --triplet m68k-amiga || \
-          cat /usr/local/share/vcpkg/buildtrees/zlib/install-m68k-amiga-dbg-out.log
+          vcpkg install openssl --triplet m68k-amiga 
+          # || \
+          # cat /usr/local/share/vcpkg/buildtrees/zlib/install-m68k-amiga-dbg-out.log
 
           if [ '${{ matrix.build }}' = 'cmake' ]; then
             cmake -B bld \
