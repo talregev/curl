@@ -110,6 +110,8 @@ if test "x$OPT_MBEDTLS" != "xno"; then
     if test "$ac_cv_func_mbedtls_des_crypt_ecb" = 'yes'; then
       HAVE_MBEDTLS_DES_CRYPT_ECB=1
     fi
+
+    AC_CHECK_FUNCS([mbedtls_ssl_set_quic_method], [QUIC_ENABLED=yes])
   fi
 
   test -z "$ssl_msg" || ssl_backends="${ssl_backends:+$ssl_backends, }$ssl_msg"

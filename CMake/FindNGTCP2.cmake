@@ -29,6 +29,7 @@
 # - BoringSSL:  Use `libngtcp2_crypto_boringssl`. (also for AWS-LC)
 # - GnuTLS:     Use `libngtcp2_crypto_gnutls`.
 # - LibreSSL:   Use `libngtcp2_crypto_libressl`. (requires ngtcp2 1.15.0+)
+# - mbedTLS:    Use `libngtcp2_crypto_mbedtls`.
 # - ossl:       Use `libngtcp2_crypto_ossl`.
 # - quictls:    Use `libngtcp2_crypto_quictls`. (also for LibreSSL with ngtcp2 <1.15.0)
 # - wolfSSL:    Use `libngtcp2_crypto_wolfssl`.
@@ -40,6 +41,7 @@
 # - `NGTCP2_CRYPTO_BORINGSSL_LIBRARY`:  Absolute path to `ngtcp2_crypto_boringssl` library.
 # - `NGTCP2_CRYPTO_GNUTLS_LIBRARY`:     Absolute path to `ngtcp2_crypto_gnutls` library.
 # - `NGTCP2_CRYPTO_LIBRESSL_LIBRARY`:   Absolute path to `ngtcp2_crypto_libressl` library.
+# - `NGTCP2_CRYPTO_MBEDTLS_LIBRARY`:    Absolute path to `ngtcp2_crypto_mbedtls` library.
 # - `NGTCP2_CRYPTO_OSSL_LIBRARY`:       Absolute path to `ngtcp2_crypto_ossl` library.
 # - `NGTCP2_CRYPTO_QUICTLS_LIBRARY`:    Absolute path to `ngtcp2_crypto_quictls` library.
 # - `NGTCP2_CRYPTO_WOLFSSL_LIBRARY`:    Absolute path to `ngtcp2_crypto_wolfssl` library.
@@ -55,7 +57,7 @@
 set(NGTCP2_CRYPTO_BACKEND "")
 if(NGTCP2_FIND_COMPONENTS)
   foreach(_component IN LISTS NGTCP2_FIND_COMPONENTS)
-    if(_component MATCHES "^(BoringSSL|GnuTLS|LibreSSL|ossl|quictls|wolfSSL)")
+    if(_component MATCHES "^(BoringSSL|GnuTLS|LibreSSL|mbedTLS|ossl|quictls|wolfSSL)")
       if(NGTCP2_CRYPTO_BACKEND)
         message(FATAL_ERROR "NGTCP2: Only one crypto library can be selected")
       endif()

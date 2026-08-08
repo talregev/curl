@@ -43,6 +43,9 @@
 #elif defined(USE_WOLFSSL)
 #include <ngtcp2/ngtcp2_crypto_wolfssl.h>
 #include "vtls/wolfssl.h"
+#elif defined(USE_MBEDTLS)
+#include <ngtcp2/ngtcp2_crypto_mbedtls.h>
+#include "vtls/mbedtls.h"
 #endif
 
 #include <nghttp3/nghttp3.h>
@@ -866,6 +869,12 @@ static CURLcode cf_ngtcp2_tls_ctx_setup(struct Curl_cfilter *cf,
     /* Register to get notified when a new session is received */
     wolfSSL_CTX_sess_set_new_cb(ctx->wssl.ssl_ctx, wssl_quic_new_session_cb);
   }
+#elif defined(USE_MBEDTLS)
+  (void)cf;
+  if(ngtcp2_crypto_mbedtls_configure_client_session(&ctx->mbedtls.ssl) != 0) {
+    failf(data, "ngtcp2_crypto_mbedtls_configure_client_session failed");
+    return CURLE_FAILED_INIT;
+  }
 #endif
   return CURLE_OK;
 }
@@ -1061,6 +1070,8 @@ static CURLcode cf_connect_start(struct Curl_cfilter *cf,
   ngtcp2_conn_set_tls_native_handle(ctx->qconn, ctx->tls.gtls.session);
 #elif defined(USE_WOLFSSL)
   ngtcp2_conn_set_tls_native_handle(ctx->qconn, ctx->tls.wssl.ssl);
+#elif defined(USE_MBEDTLS)
+  ngtcp2_conn_set_tls_native_handle(ctx->qconn, &ctx->tls.mbedtls.ssl);
 #else
 #error "ngtcp2 TLS backend not defined"
 #endif

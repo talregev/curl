@@ -24,7 +24,8 @@
 #include "curl_setup.h"
 
 #if defined(USE_HTTP3) && \
-  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL))
+  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL) || \
+   defined(USE_MBEDTLS))
 
 #ifdef USE_OPENSSL
 #include <openssl/err.h>
@@ -41,10 +42,14 @@
 #include <wolfssl/ssl.h>
 #include <wolfssl/quic.h>
 #include "vtls/wolfssl.h"
+#elif defined(USE_MBEDTLS)
+#include <mbedtls/ssl.h>
+#include "vtls/mbedtls.h"
 #endif
 
 #include "urldata.h"
 #include "cfilters.h"
+#include "curl_trc.h"
 #include "vtls/vtls.h"
 #include "vtls/vtls_scache.h"
 #include "vquic/vquic-tls.h"
@@ -62,6 +67,8 @@ CURLcode Curl_vquic_tls_peer_init(struct Curl_peer *origin,
   Curl_gtls_version(tls_id, sizeof(tls_id));
 #elif defined(USE_WOLFSSL)
   Curl_wssl_version(tls_id, sizeof(tls_id));
+#elif defined(USE_MBEDTLS)
+  Curl_mbedtls_version(tls_id, sizeof(tls_id));
 #else
 #error "no TLS lib in used, should not happen"
   return CURLE_FAILED_INIT;
@@ -93,6 +100,27 @@ CURLcode Curl_vquic_tls_init(struct curl_tls_ctx *ctx,
   return Curl_wssl_ctx_init(&ctx->wssl, cf, data, ssl_peer, alpns,
                             cb_setup, cb_user_data,
                             ssl_user_data, session_reuse_cb);
+#elif defined(USE_MBEDTLS)
+  CURLcode result;
+
+  (void)session_reuse_cb;
+  memset(ctx, 0, sizeof(*ctx));
+  result = Curl_mbedtls_ctx_init(&ctx->mbedtls, cf, data, ssl_peer,
+                                 alpns, TRUE);
+  if(result)
+    goto fail;
+
+  mbedtls_ssl_set_user_data_p(&ctx->mbedtls.ssl, ssl_user_data);
+  if(cb_setup) {
+    result = cb_setup(cf, data, cb_user_data);
+    if(result)
+      goto fail;
+  }
+  return CURLE_OK;
+
+fail:
+  Curl_vquic_tls_cleanup(ctx);
+  return result;
 #else
 #error "no TLS lib in used, should not happen"
   return CURLE_FAILED_INIT;
@@ -115,6 +143,8 @@ void Curl_vquic_tls_cleanup(struct curl_tls_ctx *ctx)
     wolfSSL_free(ctx->wssl.ssl);
   if(ctx->wssl.ssl_ctx)
     wolfSSL_CTX_free(ctx->wssl.ssl_ctx);
+#elif defined(USE_MBEDTLS)
+  Curl_mbedtls_ctx_free(&ctx->mbedtls);
 #endif
   memset(ctx, 0, sizeof(*ctx));
 }
@@ -142,6 +172,10 @@ CURLcode Curl_vquic_tls_before_recv(struct curl_tls_ctx *ctx,
     if(result)
       return result;
   }
+#elif defined(USE_MBEDTLS)
+  (void)ctx;
+  (void)cf;
+  (void)data;
 #else
   (void)ctx;
   (void)cf;
@@ -157,6 +191,9 @@ CURLcode Curl_vquic_tls_verify_peer(struct curl_tls_ctx *ctx,
 {
   struct ssl_primary_config *conn_config;
   CURLcode result = CURLE_OK;
+#ifdef USE_MBEDTLS
+  uint32_t flags;
+#endif
 
   conn_config = Curl_ssl_cf_get_primary_config(cf);
   if(!conn_config)
@@ -189,6 +226,15 @@ CURLcode Curl_vquic_tls_verify_peer(struct curl_tls_ctx *ctx,
   }
   if(!result)
     result = Curl_wssl_verify_pinned(cf, data, &ctx->wssl);
+#elif defined(USE_MBEDTLS)
+  (void)conn_config;
+  (void)peer;
+  flags = mbedtls_ssl_get_verify_result(&ctx->mbedtls.ssl);
+  if(flags) {
+    failf(data, "mbedTLS: certificate verification failed (0x%08x)",
+          (unsigned int)flags);
+    result = CURLE_PEER_FAILED_VERIFICATION;
+  }
 #endif
   /* on error, remove any session we might have in the pool */
   if(result)
@@ -215,6 +261,12 @@ bool Curl_vquic_tls_get_ssl_info(struct curl_tls_ctx *ctx,
   info->internals = give_ssl_ctx ?
                     (void *)ctx->wssl.ssl_ctx : (void *)ctx->wssl.ssl;
   return TRUE;
+#elif defined(USE_MBEDTLS)
+  info->backend = CURLSSLBACKEND_MBEDTLS;
+  info->internals = give_ssl_ctx ?
+                    (void *)&ctx->mbedtls.config :
+                    (void *)&ctx->mbedtls.ssl;
+  return TRUE;
 #else
   return FALSE;
 #endif
@@ -224,6 +276,9 @@ void Curl_vquic_report_handshake(struct curl_tls_ctx *ctx,
                                  struct Curl_cfilter *cf,
                                  struct Curl_easy *data)
 {
+#ifdef USE_MBEDTLS
+  const char *alpn;
+#endif
   (void)cf;
 #ifdef USE_OPENSSL
   (void)cf;
@@ -232,10 +287,17 @@ void Curl_vquic_report_handshake(struct curl_tls_ctx *ctx,
   Curl_gtls_report_handshake(data, &ctx->gtls);
 #elif defined(USE_WOLFSSL)
   Curl_wssl_report_handshake(data, &ctx->wssl);
+#elif defined(USE_MBEDTLS)
+  alpn = mbedtls_ssl_get_alpn_protocol(&ctx->mbedtls.ssl);
+  infof(data, "SSL connection using %s / %s",
+        mbedtls_ssl_get_version(&ctx->mbedtls.ssl),
+        mbedtls_ssl_get_ciphersuite(&ctx->mbedtls.ssl));
+  if(alpn)
+    infof(data, VTLS_INFOF_ALPN_ACCEPTED, (int)strlen(alpn), alpn);
 #else
   (void)data;
   (void)ctx;
 #endif
 }
 
-#endif /* !USE_HTTP3 && (USE_OPENSSL || USE_GNUTLS || USE_WOLFSSL) */
+#endif /* USE_HTTP3 and supported TLS backend */

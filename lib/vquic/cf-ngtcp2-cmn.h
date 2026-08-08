@@ -49,6 +49,9 @@
 #include <wolfssl/quic.h>
 #include <ngtcp2/ngtcp2_crypto_wolfssl.h>
 #include "vtls/wolfssl.h"
+#elif defined(USE_MBEDTLS)
+#include <ngtcp2/ngtcp2_crypto_mbedtls.h>
+#include "vtls/mbedtls.h"
 #endif
 
 #ifdef HAVE_NETINET_UDP_H

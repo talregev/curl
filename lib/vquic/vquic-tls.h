@@ -26,13 +26,15 @@
 #include "curl_setup.h"
 
 #if defined(USE_HTTP3) && \
-  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL))
+  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL) || \
+   defined(USE_MBEDTLS))
 
 #include "bufq.h"
 #include "vtls/vtls.h"
 #include "vtls/vtls_int.h"
 
 #include "vtls/openssl.h"
+#include "vtls/mbedtls.h"
 #include "vtls/wolfssl.h"
 
 struct ssl_peer;
@@ -46,6 +48,8 @@ struct curl_tls_ctx {
   struct gtls_ctx gtls;
 #elif defined(USE_WOLFSSL)
   struct wssl_ctx wssl;
+#elif defined(USE_MBEDTLS)
+  struct mbed_ssl_backend_data mbedtls;
 #endif
 };
 
@@ -120,6 +124,6 @@ void Curl_vquic_report_handshake(struct curl_tls_ctx *ctx,
                                  struct Curl_cfilter *cf,
                                  struct Curl_easy *data);
 
-#endif /* !USE_HTTP3 && (USE_OPENSSL || USE_GNUTLS || USE_WOLFSSL) */
+#endif /* USE_HTTP3 and supported TLS backend */
 
 #endif /* HEADER_CURL_VQUIC_TLS_H */
