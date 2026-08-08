@@ -49,6 +49,9 @@
 #include <wolfssl/quic.h>
 #include <ngtcp2/ngtcp2_crypto_wolfssl.h>
 #include "vtls/wolfssl.h"
+#elif defined(USE_SCHANNEL)
+#include <ngtcp2/ngtcp2_crypto_schannel.h>
+#include "vtls/schannel.h"
 #endif
 
 #ifdef HAVE_NETINET_UDP_H

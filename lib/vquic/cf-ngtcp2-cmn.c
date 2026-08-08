@@ -43,6 +43,9 @@
 #elif defined(USE_WOLFSSL)
 #include <ngtcp2/ngtcp2_crypto_wolfssl.h>
 #include "vtls/wolfssl.h"
+#elif defined(USE_SCHANNEL)
+#include <ngtcp2/ngtcp2_crypto_schannel.h>
+#include "vtls/schannel.h"
 #endif
 
 #include <nghttp3/nghttp3.h>
@@ -250,8 +253,13 @@ static int cb_ngtcp2_handshake_completed(ngtcp2_conn *tconn, void *user_data)
 
   ctx->tls_vrfy_result = Curl_vquic_tls_verify_peer(&ctx->tls, cf,
                                                     data, &ctx->ssl_peer);
-  if(ctx->tls_vrfy_result)
+  if(ctx->tls_vrfy_result) {
+    CURL_TRC_CF(data, cf, "TLS peer verification failed: %d",
+                (int)ctx->tls_vrfy_result);
+    failf(data, "QUIC TLS peer verification failed: %d",
+          (int)ctx->tls_vrfy_result);
     return NGTCP2_ERR_CALLBACK_FAILURE;
+  }
 
 #ifdef CURLVERBOSE
   if(Curl_trc_is_verbose(data)) {
@@ -866,6 +874,10 @@ static CURLcode cf_ngtcp2_tls_ctx_setup(struct Curl_cfilter *cf,
     /* Register to get notified when a new session is received */
     wolfSSL_CTX_sess_set_new_cb(ctx->wssl.ssl_ctx, wssl_quic_new_session_cb);
   }
+#elif defined(USE_SCHANNEL)
+  (void)cf;
+  (void)data;
+  (void)ctx;
 #endif
   return CURLE_OK;
 }
@@ -1061,6 +1073,8 @@ static CURLcode cf_connect_start(struct Curl_cfilter *cf,
   ngtcp2_conn_set_tls_native_handle(ctx->qconn, ctx->tls.gtls.session);
 #elif defined(USE_WOLFSSL)
   ngtcp2_conn_set_tls_native_handle(ctx->qconn, ctx->tls.wssl.ssl);
+#elif defined(USE_SCHANNEL)
+  ngtcp2_conn_set_tls_native_handle(ctx->qconn, ctx->tls.schannel);
 #else
 #error "ngtcp2 TLS backend not defined"
 #endif
@@ -1650,10 +1664,22 @@ static CURLcode cf_ngtcp2_recv_pkts(const unsigned char *buf, size_t buflen,
                   ngtcp2_strerror(rv), rv);
       Curl_cf_ngtcp2_cmn_err_set(pktx->cf, pktx->data, rv);
 
-      if(rv == NGTCP2_ERR_CRYPTO)
+      if(rv == NGTCP2_ERR_CRYPTO) {
+#ifdef USE_SCHANNEL
+        failf(pktx->data, "Schannel QUIC crypto error 0x%08lx, TLS alert %u",
+              (unsigned long)ngtcp2_crypto_schannel_get_last_error(
+                ctx->tls.schannel),
+              (unsigned int)ngtcp2_conn_get_tls_alert2(ctx->qconn));
+        CURL_TRC_CF(pktx->data, pktx->cf,
+                    "Schannel crypto error 0x%08lx, TLS alert %u",
+                    (unsigned long)ngtcp2_crypto_schannel_get_last_error(
+                      ctx->tls.schannel),
+                    (unsigned int)ngtcp2_conn_get_tls_alert2(ctx->qconn));
+#endif
         /* this is a "TLS problem", but a failed certificate verification
            is a common reason for this */
         return CURLE_PEER_FAILED_VERIFICATION;
+      }
       return CURLE_RECV_ERROR;
     }
   }

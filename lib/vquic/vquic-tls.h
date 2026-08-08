@@ -26,7 +26,8 @@
 #include "curl_setup.h"
 
 #if defined(USE_HTTP3) && \
-  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL))
+  (defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_WOLFSSL) || \
+   defined(USE_SCHANNEL))
 
 #include "bufq.h"
 #include "vtls/vtls.h"
@@ -34,6 +35,10 @@
 
 #include "vtls/openssl.h"
 #include "vtls/wolfssl.h"
+
+#ifdef USE_SCHANNEL
+#include <ngtcp2/ngtcp2_crypto_schannel.h>
+#endif
 
 struct ssl_peer;
 struct Curl_ssl_session;
@@ -46,6 +51,11 @@ struct curl_tls_ctx {
   struct gtls_ctx gtls;
 #elif defined(USE_WOLFSSL)
   struct wssl_ctx wssl;
+#elif defined(USE_SCHANNEL)
+  CredHandle credential;
+  HCERTSTORE client_cert_store;
+  ngtcp2_crypto_schannel *schannel;
+  BIT(credential_initialized);
 #endif
 };
 
@@ -120,6 +130,6 @@ void Curl_vquic_report_handshake(struct curl_tls_ctx *ctx,
                                  struct Curl_cfilter *cf,
                                  struct Curl_easy *data);
 
-#endif /* !USE_HTTP3 && (USE_OPENSSL || USE_GNUTLS || USE_WOLFSSL) */
+#endif /* USE_HTTP3 and supported TLS backend */
 
 #endif /* HEADER_CURL_VQUIC_TLS_H */

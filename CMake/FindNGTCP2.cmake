@@ -31,6 +31,7 @@
 # - LibreSSL:   Use `libngtcp2_crypto_libressl`. (requires ngtcp2 1.15.0+)
 # - ossl:       Use `libngtcp2_crypto_ossl`.
 # - quictls:    Use `libngtcp2_crypto_quictls`. (also for LibreSSL with ngtcp2 <1.15.0)
+# - Schannel:   Use `libngtcp2_crypto_schannel`.
 # - wolfSSL:    Use `libngtcp2_crypto_wolfssl`.
 #
 # Input variables:
@@ -42,6 +43,7 @@
 # - `NGTCP2_CRYPTO_LIBRESSL_LIBRARY`:   Absolute path to `ngtcp2_crypto_libressl` library.
 # - `NGTCP2_CRYPTO_OSSL_LIBRARY`:       Absolute path to `ngtcp2_crypto_ossl` library.
 # - `NGTCP2_CRYPTO_QUICTLS_LIBRARY`:    Absolute path to `ngtcp2_crypto_quictls` library.
+# - `NGTCP2_CRYPTO_SCHANNEL_LIBRARY`:   Absolute path to `ngtcp2_crypto_schannel` library.
 # - `NGTCP2_CRYPTO_WOLFSSL_LIBRARY`:    Absolute path to `ngtcp2_crypto_wolfssl` library.
 # - `NGTCP2_USE_STATIC_LIBS`:           Configure for static ngtcp2 libraries.
 #
@@ -55,7 +57,7 @@
 set(NGTCP2_CRYPTO_BACKEND "")
 if(NGTCP2_FIND_COMPONENTS)
   foreach(_component IN LISTS NGTCP2_FIND_COMPONENTS)
-    if(_component MATCHES "^(BoringSSL|GnuTLS|LibreSSL|ossl|quictls|wolfSSL)")
+    if(_component MATCHES "^(BoringSSL|GnuTLS|LibreSSL|ossl|quictls|Schannel|wolfSSL)")
       if(NGTCP2_CRYPTO_BACKEND)
         message(FATAL_ERROR "NGTCP2: Only one crypto library can be selected")
       endif()

@@ -580,6 +580,97 @@ static CURLcode get_client_cert(struct Curl_cfilter *cf,
   return CURLE_OK;
 }
 
+static void schannel_unicode_string_init(UNICODE_STRING *dest,
+                                         wchar_t *value, size_t valuelen)
+{
+  dest->Length = (USHORT)valuelen;
+  dest->MaximumLength = (USHORT)valuelen;
+  dest->Buffer = value;
+}
+
+CURLcode Curl_schannel_acquire_quic_credential(
+  struct Curl_cfilter *cf, struct Curl_easy *data, CredHandle *credential,
+  HCERTSTORE *client_cert_store)
+{
+  struct ssl_config_data *ssl_config = Curl_ssl_cf_get_config(cf, data);
+  CRYPTO_SETTINGS disabled_crypto[2] = { 0 };
+  UNICODE_STRING blocked_mode = { 0 };
+  TLS_PARAMETERS tls_parameters = { 0 };
+  SCH_CREDENTIALS credentials = { 0 };
+  PCCERT_CONTEXT client_cert = NULL;
+  DWORD enabled_protocols = 0;
+  TimeStamp expiry;
+  SECURITY_STATUS status;
+  CURLcode result;
+
+  *client_cert_store = NULL;
+  SecInvalidateHandle(credential);
+
+  result = schannel_set_ssl_version_min_max(&enabled_protocols, cf, data);
+  if(result)
+    return result;
+  if(!(enabled_protocols & SP_PROT_TLS1_3_CLIENT)) {
+    failf(data, "Schannel HTTP/3 requires TLS 1.3");
+    return CURLE_SSL_CONNECT_ERROR;
+  }
+
+  result = get_client_cert(cf, data, client_cert_store, &client_cert);
+  if(result)
+    return result;
+
+  schannel_unicode_string_init(
+    &disabled_crypto[0].strCngAlgId,
+    (wchar_t *)BCRYPT_CHACHA20_POLY1305_ALGORITHM,
+    sizeof(BCRYPT_CHACHA20_POLY1305_ALGORITHM));
+  disabled_crypto[0].eAlgorithmUsage = TlsParametersCngAlgUsageCipher;
+  schannel_unicode_string_init(&blocked_mode,
+                               (wchar_t *)BCRYPT_CHAIN_MODE_CCM,
+                               sizeof(BCRYPT_CHAIN_MODE_CCM));
+  schannel_unicode_string_init(&disabled_crypto[1].strCngAlgId,
+                               (wchar_t *)BCRYPT_AES_ALGORITHM,
+                               sizeof(BCRYPT_AES_ALGORITHM));
+  disabled_crypto[1].eAlgorithmUsage = TlsParametersCngAlgUsageCipher;
+  disabled_crypto[1].cChainingModes = 1;
+  disabled_crypto[1].rgstrChainingModes = &blocked_mode;
+
+  tls_parameters.grbitDisabledProtocols =
+    ~(DWORD)SP_PROT_TLS1_3_CLIENT;
+  tls_parameters.cDisabledCrypto = (DWORD)_countof(disabled_crypto);
+  tls_parameters.pDisabledCrypto = disabled_crypto;
+
+  credentials.dwVersion = SCH_CREDENTIALS_VERSION;
+  credentials.dwFlags = SCH_USE_STRONG_CRYPTO |
+                        SCH_CRED_MANUAL_CRED_VALIDATION;
+  credentials.cTlsParameters = 1;
+  credentials.pTlsParameters = &tls_parameters;
+  if(client_cert) {
+    credentials.cCreds = 1;
+    credentials.paCred = &client_cert;
+  }
+  else if(!ssl_config->auto_client_cert)
+    credentials.dwFlags |= SCH_CRED_NO_DEFAULT_CREDS;
+
+  status = Curl_pSecFn->AcquireCredentialsHandle(
+    NULL, (TCHAR *)CURL_UNCONST(UNISP_NAME), SECPKG_CRED_OUTBOUND, NULL,
+    &credentials, NULL, NULL, credential, &expiry);
+
+  if(client_cert)
+    CertFreeCertificateContext(client_cert);
+  if(status != SEC_E_OK) {
+    char buffer[STRERROR_LEN];
+    failf(data, "schannel: QUIC AcquireCredentialsHandle failed: %s",
+          Curl_sspi_strerror(status, buffer, sizeof(buffer)));
+    if(*client_cert_store) {
+      CertCloseStore(*client_cert_store, 0);
+      *client_cert_store = NULL;
+    }
+    return status == SEC_E_INSUFFICIENT_MEMORY ?
+      CURLE_OUT_OF_MEMORY : CURLE_SSL_CONNECT_ERROR;
+  }
+
+  return CURLE_OK;
+}
+
 static CURLcode acquire_sspi_handle(struct Curl_cfilter *cf,
                                     struct Curl_easy *data,
                                     struct schannel_ssl_backend_data *backend,
@@ -1093,19 +1184,14 @@ static CURLcode schannel_error(struct Curl_easy *data,
   }
 }
 
-static CURLcode schannel_pkp_pin_peer_pubkey(struct Curl_cfilter *cf,
-                                             struct Curl_easy *data,
-                                             const char *pinnedpubkey)
+CURLcode Curl_schannel_verify_pinned(CtxtHandle *ctxt,
+                                     struct Curl_easy *data,
+                                     const char *pinnedpubkey)
 {
-  struct ssl_connect_data *connssl = cf->ctx;
-  struct schannel_ssl_backend_data *backend =
-    (struct schannel_ssl_backend_data *)connssl->backend;
   CERT_CONTEXT *pCertContextServer = NULL;
 
   /* Result is returned to caller */
   CURLcode result = CURLE_SSL_PINNEDPUBKEYNOTMATCH;
-
-  DEBUGASSERT(backend);
 
   /* if a path was not specified, do not pin */
   if(!pinnedpubkey)
@@ -1119,7 +1205,7 @@ static CURLcode schannel_pkp_pin_peer_pubkey(struct Curl_cfilter *cf,
     struct Curl_asn1Element *pubkey;
 
     sspi_status =
-      Curl_pSecFn->QueryContextAttributes(&backend->ctxt->ctxt_handle,
+      Curl_pSecFn->QueryContextAttributes(ctxt,
                                           SECPKG_ATTR_REMOTE_CERT_CONTEXT,
                                           &pCertContextServer);
 
@@ -1466,7 +1552,8 @@ static CURLcode schannel_connect_step2(struct Curl_cfilter *cf,
   pubkey_ptr = data->set.str[STRING_SSL_PINNEDPUBLICKEY];
 #endif
   if(pubkey_ptr) {
-    result = schannel_pkp_pin_peer_pubkey(cf, data, pubkey_ptr);
+    result = Curl_schannel_verify_pinned(&backend->ctxt->ctxt_handle,
+                                         data, pubkey_ptr);
     if(result) {
       failf(data, "SSL: public key does not match pinned public key");
       return result;
@@ -2591,7 +2678,12 @@ static int schannel_init(void)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcast-function-type-strict"
 #endif
-  WINE_GET_VERSION_FN p_wine_get_version =
+  WINE_GET_VERSION_FN p_wine_get_version;
+
+  /* Schannel is initialized before Curl_win32_init(). Make sure version
+     checks can use RtlVerifyVersionInfo instead of manifest-dependent APIs. */
+  curlx_verify_windows_init();
+  p_wine_get_version =
     CURLX_FUNCTION_CAST(WINE_GET_VERSION_FN,
       GetProcAddress(GetModuleHandle(TEXT("ntdll")), "wine_get_version"));
 #if defined(__clang__) && __clang_major__ >= 16

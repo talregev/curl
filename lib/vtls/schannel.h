@@ -41,5 +41,21 @@ CURLcode Curl_verify_host(struct Curl_cfilter *cf, struct Curl_easy *data);
 CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
                                  struct Curl_easy *data);
 
+CURLcode Curl_schannel_acquire_quic_credential(
+  struct Curl_cfilter *cf, struct Curl_easy *data, CredHandle *credential,
+  HCERTSTORE *client_cert_store);
+
+CURLcode Curl_schannel_verify_host(CtxtHandle *ctxt, const char *hostname,
+                                   struct Curl_easy *data);
+
+CURLcode Curl_schannel_verify_certificate(CtxtHandle *ctxt,
+                                          const char *hostname,
+                                          struct Curl_cfilter *cf,
+                                          struct Curl_easy *data);
+
+CURLcode Curl_schannel_verify_pinned(CtxtHandle *ctxt,
+                                     struct Curl_easy *data,
+                                     const char *pinnedpubkey);
+
 #endif /* USE_SCHANNEL */
 #endif /* HEADER_CURL_SCHANNEL_H */

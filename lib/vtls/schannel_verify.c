@@ -49,8 +49,6 @@
 #include "curlx/version_win32.h"
 #include "curlx/winapi.h"
 
-#define BACKEND ((struct schannel_ssl_backend_data *)connssl->backend)
-
 #define MAX_CAFILE_SIZE (1024 * 1024) /* 1 MiB */
 #define BEGIN_CERT      "-----BEGIN CERTIFICATE-----"
 #define END_CERT        "\n-----END CERTIFICATE-----"
@@ -472,15 +470,15 @@ static bool get_alt_name_info(struct Curl_easy *data,
 }
 
 /* Verify the server's hostname */
-CURLcode Curl_verify_host(struct Curl_cfilter *cf, struct Curl_easy *data)
+CURLcode Curl_schannel_verify_host(CtxtHandle *ctxt, const char *hostname,
+                                   struct Curl_easy *data)
 {
   CURLcode result = CURLE_PEER_FAILED_VERIFICATION;
-  struct ssl_connect_data *connssl = cf->ctx;
   CERT_CONTEXT *pCertContextServer = NULL;
   SECURITY_STATUS sspi_status;
   TCHAR *cert_hostname_buff = NULL;
   size_t cert_hostname_buff_index = 0;
-  const char *conn_hostname = connssl->peer.origin->hostname;
+  const char *conn_hostname = hostname;
   size_t hostlen = strlen(conn_hostname);
   DWORD len = 0;
   DWORD actual_len = 0;
@@ -492,7 +490,7 @@ CURLcode Curl_verify_host(struct Curl_cfilter *cf, struct Curl_easy *data)
   DWORD i;
 
   sspi_status =
-    Curl_pSecFn->QueryContextAttributes(&BACKEND->ctxt->ctxt_handle,
+    Curl_pSecFn->QueryContextAttributes(ctxt,
                                         SECPKG_ATTR_REMOTE_CERT_CONTEXT,
                                         &pCertContextServer);
 
@@ -626,11 +624,23 @@ cleanup:
   return result;
 }
 
-/* Verify the server's certificate and hostname */
-CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
-                                 struct Curl_easy *data)
+CURLcode Curl_verify_host(struct Curl_cfilter *cf, struct Curl_easy *data)
 {
   struct ssl_connect_data *connssl = cf->ctx;
+  struct schannel_ssl_backend_data *backend =
+    (struct schannel_ssl_backend_data *)connssl->backend;
+
+  DEBUGASSERT(backend);
+  return Curl_schannel_verify_host(&backend->ctxt->ctxt_handle,
+                                   connssl->peer.origin->hostname, data);
+}
+
+/* Verify the server's certificate and hostname */
+CURLcode Curl_schannel_verify_certificate(CtxtHandle *ctxt,
+                                          const char *hostname,
+                                          struct Curl_cfilter *cf,
+                                          struct Curl_easy *data)
+{
   struct ssl_primary_config *conn_config = Curl_ssl_cf_get_primary_config(cf);
   struct ssl_config_data *ssl_config = Curl_ssl_cf_get_config(cf, data);
   SECURITY_STATUS sspi_status;
@@ -641,10 +651,8 @@ CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
   HCERTSTORE trust_store = NULL;
   HCERTSTORE own_trust_store = NULL;
 
-  DEBUGASSERT(BACKEND);
-
   sspi_status =
-    Curl_pSecFn->QueryContextAttributes(&BACKEND->ctxt->ctxt_handle,
+    Curl_pSecFn->QueryContextAttributes(ctxt,
                                         SECPKG_ATTR_REMOTE_CERT_CONTEXT,
                                         &pCertContextServer);
 
@@ -656,8 +664,7 @@ CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
   }
 
   if(result == CURLE_OK &&
-     (conn_config->CAfile || conn_config->ca_info_blob) &&
-     BACKEND->use_manual_cred_validation) {
+     (conn_config->CAfile || conn_config->ca_info_blob)) {
     /*
      * Create a chain engine that uses the certificates in the CA file as
      * trusted certificates. This is only supported on Windows 7+.
@@ -811,7 +818,7 @@ CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
 
   if(result == CURLE_OK) {
     if(conn_config->verifyhost) {
-      result = Curl_verify_host(cf, data);
+      result = Curl_schannel_verify_host(ctxt, hostname, data);
     }
   }
 
@@ -830,6 +837,19 @@ CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
     CertFreeCertificateContext(pCertContextServer);
 
   return result;
+}
+
+CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
+                                 struct Curl_easy *data)
+{
+  struct ssl_connect_data *connssl = cf->ctx;
+  struct schannel_ssl_backend_data *backend =
+    (struct schannel_ssl_backend_data *)connssl->backend;
+
+  DEBUGASSERT(backend);
+  return Curl_schannel_verify_certificate(&backend->ctxt->ctxt_handle,
+                                          connssl->peer.origin->hostname,
+                                          cf, data);
 }
 
 #endif /* USE_SCHANNEL */
